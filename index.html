@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HVAC Duct Sizing & Pressure Drop Calculator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div class="max-w-4xl mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold text-gray-900 mb-1">HVAC Duct Sizing & Pressure Drop Calculator</h1>
+  <p class="text-sm text-gray-500 mb-6">Calculate duct sizes, velocity, and pressure drop using the equal-friction method.</p>
+
+  <div class="bg-white rounded-xl shadow p-6 mb-6">
+    <div class="flex items-center gap-4 mb-5">
+      <span class="text-sm font-medium text-gray-700">Unit System:</span>
+      <label class="flex items-center gap-1 cursor-pointer">
+        <input type="radio" name="units" value="imperial" checked onchange="toggleUnits()" class="text-blue-600"> <span class="text-sm">Imperial (CFM, in. w.g., ft)</span>
+      </label>
+      <label class="flex items-center gap-1 cursor-pointer">
+        <input type="radio" name="units" value="metric" onchange="toggleUnits()" class="text-blue-600"> <span class="text-sm">Metric (m³/h, Pa, m)</span>
+      </label>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="airflow">Airflow <span id="flowUnit">(CFM)</span></label>
+        <input id="airflow" type="number" value="1200" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="ductShape">Duct Shape</label>
+        <select id="ductShape" onchange="render()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="round">Round</option>
+          <option value="rect">Rectangular</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="friction">Friction Rate <span id="frictionUnit">(in.wg/100ft)</span></label>
+        <input id="friction" type="number" value="0.1" step="0.01" min="0.01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div id="rectFields" class="hidden col-span-2 sm:col-span-3 grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="rectW">Duct Width <span id="rectUnit">(in)</span></label>
+          <input id="rectW" type="number" value="16" step="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="rectH">Duct Height <span class="rect-unit">(in)</span></label>
+          <input id="rectH" type="number" value="10" step="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+      </div>
+    </div>
+    <button onclick="calculate()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">Calculate Duct</button>
+  </div>
+
+  <div id="results" class="hidden">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6" id="summaryCards"></div>
+
+    <div class="bg-white rounded-xl shadow p-6 mb-6">
+      <h2 class="text-base font-semibold text-gray-800 mb-4">Standard Duct Size Recommendations</h2>
+      <div id="sizeTable" class="overflow-x-auto"></div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-6">
+      <h2 class="text-base font-semibold text-gray-800 mb-4">Fittings Loss Calculator (Equivalent Length Method)</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="fElbow">90° Elbows</label>
+          <input id="fElbow" type="number" value="2" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="fTee">Tee/Branch</label>
+          <input id="fTee" type="number" value="1" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="fReducer">Reducers</label>
+          <input id="fReducer" type="number" value="1" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="ductLen">Duct Length <span id="lenUnit">(ft)</span></label>
+          <input id="ductLen" type="number" value="50" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+      </div>
+      <button onclick="calcFittings()" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-5 rounded-lg transition text-sm">Calculate Total Pressure Drop</button>
+      <div id="fittingsResult" class="mt-4 hidden"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let isImperial = true;
+const STD_SIZES_IN = [6,8,10,12,14,16,18,20]; // inches diameter
+
+function toggleUnits() {
+  isImperial = document.querySelector('input[name="units"]:checked').value === 'imperial';
+  document.getElementById('flowUnit').textContent = isImperial ? '(CFM)' : '(m³/h)';
+  document.getElementById('frictionUnit').textContent = isImperial ? '(in.wg/100ft)' : '(Pa/m)';
+  document.getElementById('lenUnit').textContent = isImperial ? '(ft)' : '(m)';
+  document.getElementById('rectUnit').textContent = isImperial ? '(in)' : '(mm)';
+  document.querySelectorAll('.rect-unit').forEach(el => el.textContent = isImperial ? '(in)' : '(mm)');
+}
+
+function render() {
+  const shape = document.getElementById('ductShape').value;
+  document.getElementById('rectFields').classList.toggle('hidden', shape !== 'rect');
+}
+
+// Darcy-Weisbach: ΔP = f * (L/D) * (ρv²/2)
+// Simplified using ASHRAE equal-friction: D = 1.128 * (Q/V)^0.5
+// For round duct with friction rate:
+// D (in) ≈ 4.86 * (Q_cfm / (0.109 * (fr)^0.5))^0.454  — simplified
+// Actually use: velocity V = Q/A, then use Darcy friction factor
+// We use empirical formula:
+// For round duct: D (in) = 1.128 * sqrt(Q_cfm / V_fpm) * 12 / sqrt(pi/4)
+
+function cfmToM3h(cfm) { return cfm * 1.699; }
+function inchToMm(in_) { return in_ * 25.4; }
+function inwg100ftToPam(inwg) { return inwg * 8.17; } // approx
+
+function calculate() {
+  const shape = document.getElementById('ductShape').value;
+  let airflowCFM = parseFloat(document.getElementById('airflow').value) || 1200;
+  let frictionRate = parseFloat(document.getElementById('friction').value) || 0.1;
+
+  // Convert to imperial for calculations
+  if (!isImperial) {
+    airflowCFM = airflowCFM / 1.699; // m3/h to CFM
+    frictionRate = frictionRate / 8.17; // Pa/m to in.wg/100ft
+  }
+
+  // Equivalent diameter for equal friction
+  // D_eq (in) = 18.18 * (Q/fr)^0.2 / fr^0.1 — simplified ASHRAE
+  // More accurate: D = 18.18 * (Q^0.45 / (fr^0.22))  — approx
+  const Deq_in = 18.18 * Math.pow(airflowCFM, 0.45) / Math.pow(frictionRate, 0.22) / Math.pow(airflowCFM, 0.25) * Math.pow(airflowCFM, 0.25);
+  // Simpler: D = 0.8 * (Q_cfm^0.5) / (fr^0.2) — rough sizing
+  // Use Darcy: first find velocity from Q and friction
+  // v_fpm = 100 * fr * D * 12 / (0.03 * 12) — simplified
+  // Let's use the equal friction approach properly
+  // D (in) = [3.26 * Q_cfm / fr^0.5]^0.4 — ASHRAE simplified
+  const D_in = Math.pow(3.26 * airflowCFM / Math.pow(frictionRate, 0.5), 0.4);
+  const A_sqft = Math.PI * (D_in/12/2) * (D_in/12/2);
+  const V_fpm = airflowCFM / A_sqft;
+
+  // Find nearest standard size
+  let bestSize = STD_SIZES_IN[0], bestDiff = Infinity;
+  STD_SIZES_IN.forEach(s => {
+    const diff = Math.abs(s - D_in);
+    if (diff < bestDiff) { bestDiff = diff; bestSize = s; }
+  });
+
+  const recV = airflowCFM / (Math.PI * (bestSize/12/2)**2);
+  const velUnit = isImperial ? 'FPM' : 'm/s';
+  const dispV = isImperial ? recV.toFixed(0) : (recV * 0.00508).toFixed(2);
+  const dispD = isImperial ? D_in.toFixed(1) + ' in' : (D_in * 25.4).toFixed(0) + ' mm';
+
+  const cards = [
+    { label: 'Calculated Diameter', value: dispD, color: 'bg-blue-50 border-blue-200 text-blue-900' },
+    { label: 'Recommended Size', value: bestSize + '"', color: 'bg-green-50 border-green-200 text-green-900' },
+    { label: 'Air Velocity', value: dispV + ' ' + velUnit, color: 'bg-yellow-50 border-yellow-200 text-yellow-900' },
+    { label: 'Friction Rate', value: frictionRate.toFixed(3) + (isImperial ? ' in/100ft' : ' Pa/m'), color: 'bg-purple-50 border-purple-200 text-purple-900' },
+  ];
+  const cardsEl = document.getElementById('summaryCards');
+  cardsEl.innerHTML = '';
+  cards.forEach(c => {
+    const div = document.createElement('div');
+    div.className = `rounded-xl border p-4 ${c.color}`;
+    const lbl = document.createElement('div');
+    lbl.className = 'text-xs font-medium uppercase tracking-wide opacity-70';
+    lbl.textContent = c.label;
+    const val = document.createElement('div');
+    val.className = 'text-xl font-bold mt-1';
+    val.textContent = c.value;
+    div.appendChild(lbl);
+    div.appendChild(val);
+    cardsEl.appendChild(div);
+  });
+
+  // Standard size table
+  const sizeTbl = document.getElementById('sizeTable');
+  sizeTbl.innerHTML = '';
+  const table = document.createElement('table');
+  table.className = 'w-full text-sm';
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr class="bg-gray-50"><th class="text-left p-2 font-medium text-gray-600 text-xs">Size (in)</th><th class="text-right p-2 font-medium text-gray-600 text-xs">Area (ft²)</th><th class="text-right p-2 font-medium text-gray-600 text-xs">Velocity (FPM)</th><th class="text-right p-2 font-medium text-gray-600 text-xs">Actual FR (in/100ft)</th><th class="text-left p-2 font-medium text-gray-600 text-xs">Verdict</th></tr>';
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  STD_SIZES_IN.forEach((s, i) => {
+    const area = Math.PI * (s/12/2)**2;
+    const vel = airflowCFM / area;
+    const fr_act = frictionRate * (D_in / s)**5;
+    const isRec = s === bestSize;
+    const okVel = vel >= 400 && vel <= 2000;
+    const verdict = isRec ? 'Recommended' : (vel < 400 ? 'Too large' : vel > 2000 ? 'Too fast' : 'Acceptable');
+    const tr = document.createElement('tr');
+    tr.className = isRec ? 'bg-green-50 font-semibold' : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50');
+    [s + '"', area.toFixed(3), vel.toFixed(0), fr_act.toFixed(3), verdict].forEach((c, ci) => {
+      const td = document.createElement('td');
+      td.className = `p-2 text-xs ${ci > 0 && ci < 4 ? 'text-right' : 'text-left'} ${isRec ? 'text-green-800' : 'text-gray-700'}`;
+      td.textContent = c;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  sizeTbl.appendChild(table);
+
+  window._lastD_in = D_in;
+  window._lastFR = frictionRate;
+  document.getElementById('results').classList.remove('hidden');
+}
+
+function calcFittings() {
+  const elbows = parseInt(document.getElementById('fElbow').value) || 0;
+  const tees = parseInt(document.getElementById('fTee').value) || 0;
+  const reducers = parseInt(document.getElementById('fReducer').value) || 0;
+  const ductLen = parseFloat(document.getElementById('ductLen').value) || 50;
+  const D = window._lastD_in || 12;
+  const fr = window._lastFR || 0.1;
+
+  // Equivalent lengths (in duct diameters)
+  const elbowEL = elbows * 20 * (D/12); // ft
+  const teeEL = tees * 35 * (D/12);
+  const reducerEL = reducers * 10 * (D/12);
+  const totalEL = ductLen + elbowEL + teeEL + reducerEL;
+  const totalDP = fr * totalEL / 100;
+  const totalDPMetric = totalDP * 249; // in.wg to Pa approx
+
+  const resultEl = document.getElementById('fittingsResult');
+  resultEl.innerHTML = '';
+  resultEl.classList.remove('hidden');
+  const rows = [
+    ['Straight Duct', ductLen.toFixed(1) + ' ft', '—'],
+    ['Elbows × ' + elbows, elbowEL.toFixed(1) + ' ft equiv.', ''],
+    ['Tees × ' + tees, teeEL.toFixed(1) + ' ft equiv.', ''],
+    ['Reducers × ' + reducers, reducerEL.toFixed(1) + ' ft equiv.', ''],
+    ['Total Equivalent Length', totalEL.toFixed(1) + ' ft', ''],
+    ['Total Pressure Drop', totalDP.toFixed(3) + ' in.w.g.', totalDPMetric.toFixed(0) + ' Pa'],
+  ];
+  const tbl = document.createElement('table');
+  tbl.className = 'w-full text-sm';
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.className = i === rows.length - 1 ? 'bg-blue-50 font-semibold' : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50');
+    r.forEach(c => {
+      const td = document.createElement('td');
+      td.className = 'p-2 text-xs text-gray-700';
+      td.textContent = c;
+      tr.appendChild(td);
+    });
+    tbl.appendChild(tr);
+  });
+  resultEl.appendChild(tbl);
+}
+
+render();
+calculate();
+</script>
+</body>
+</html>
